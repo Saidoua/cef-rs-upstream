@@ -228,23 +228,36 @@ fn configure_clang_cl(
         return Ok(());
     }
 
-    let mut flags: Vec<String> = compiler
+    // CMake de-duplicates compile options, which would drop the repeated `/imsvc` of options that
+    // take their value as a separate argument (`/imsvc <dir>`), so join those into one token.
+    let mut flags: Vec<String> = Vec::new();
+    let mut args = compiler
         .args()
         .iter()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
+        .map(|arg| arg.to_string_lossy().into_owned());
+    while let Some(arg) = args.next() {
+        let flag = match arg.as_str() {
+            "/imsvc" | "-imsvc" | "/I" | "-I" | "-isystem" | "/external:I" => match args.next() {
+                Some(value) => format!("{arg}{value}"),
+                None => arg,
+            },
+            _ => arg,
+        };
+        flags.push(flag);
+    }
 
     // clang-cl reports diagnostics that MSVC doesn't (`/MP` is unsupported, `/W4` enables extra
     // warnings), which CEF's `/WX` would turn into errors.
-    flags.extend(
-        [
-            "-Wno-unused-command-line-argument",
-            "-Wno-missing-field-initializers",
-            "-Wno-undefined-var-template",
-            "/WX-",
-        ]
-        .map(String::from),
-    );
+    for flag in [
+        "-Wno-unused-command-line-argument",
+        "-Wno-missing-field-initializers",
+        "-Wno-undefined-var-template",
+        "/WX-",
+    ] {
+        if !flags.iter().any(|existing| existing == flag) {
+            flags.push(flag.to_owned());
+        }
+    }
 
     // The Windows SDK relies on case-insensitive file names, which doesn't hold on other hosts:
     // e.g. the wrapper includes `Softpub.h` while the SDK ships `SoftPub.h`. Provide copies with
