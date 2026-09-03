@@ -77,8 +77,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -yq clang lld llvm ninja-build
+          # The MSVC STL headers require Clang 19 or newer, ubuntu-latest ships 18.
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh 20
+          sudo apt-get install -yq llvm-20 ninja-build
+          echo "/usr/lib/llvm-20/bin" >> "$GITHUB_PATH"
           rustup target add x86_64-pc-windows-msvc
           pipx install cargo-xwin
 
@@ -88,11 +91,13 @@ jobs:
           path: ~/.local/share/cef
           key: cef-cross-windows-${{ hashFiles('Cargo.toml') }}
 
+      # Only the SDK itself: cargo-xwin symlinks `clang-cl` to the `clang` found on PATH
+      # next to it, and that must be recreated for the toolchain installed above.
       - name: Cache Windows SDK
         uses: actions/cache@v6.1.0
         with:
-          path: ~/.cache/cargo-xwin
-          key: cargo-xwin-${{ runner.os }}
+          path: ~/.cache/cargo-xwin/xwin
+          key: cargo-xwin-sdk-${{ runner.os }}
 
       - name: Build
         run: CEF_PATH="$HOME/.local/share/cef" cargo xwin build -p cefsimple --target x86_64-pc-windows-msvc --verbose
