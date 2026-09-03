@@ -68,3 +68,31 @@ jobs:
 
       - name: Run tests
         run: cargo test --verbose
+
+  cross-compile-windows:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq clang lld llvm ninja-build
+          rustup target add x86_64-pc-windows-msvc
+          pipx install cargo-xwin
+
+      - name: Cache CEF
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.local/share/cef
+          key: cef-cross-windows-${{ hashFiles('Cargo.toml') }}
+
+      - name: Cache Windows SDK
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/cargo-xwin
+          key: cargo-xwin-${{ runner.os }}
+
+      - name: Build
+        run: CEF_PATH="$HOME/.local/share/cef" cargo xwin build -p cefsimple --target x86_64-pc-windows-msvc --verbose
