@@ -139,7 +139,10 @@ fn main() -> anyhow::Result<()> {
         // Seeds the list CEF's cmake appends its own defines to and applies
         // to the target; CMAKE_CXX_FLAGS would not survive, cef_variables
         // clears it for the Ninja generator on Windows.
-        .define("CEF_COMPILER_DEFINES", format!("CEF_API_VERSION={api_version}"));
+        .define(
+            "CEF_COMPILER_DEFINES",
+            format!("CEF_API_VERSION={api_version}"),
+        );
 
     let project_arch = match os_arch.arch {
         "aarch64" => "arm64",
