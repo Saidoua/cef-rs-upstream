@@ -53,6 +53,7 @@ pub trait Rc {
 
 #[doc(hidden)]
 pub trait WrapRcPtr {
+    /// Returns the raw CEF object pointer owned by this Rust wrapper without changing its reference count.
     fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void;
 }
 
