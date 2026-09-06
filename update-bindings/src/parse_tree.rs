@@ -2327,8 +2327,13 @@ impl ParseTree<'_> {
                     }
                 }
             })
-            .unwrap_or(quote! { fn get_raw(&self) -> *mut #name_ident; });
-        let impl_base_name = impl_base_name.unwrap_or(quote! { Clone + Sized + Rc });
+            .unwrap_or(quote! {
+                fn get_raw(&self) -> *mut #name_ident {
+                    self.wrap_rc_ptr().cast()
+                }
+            });
+        let impl_base_name =
+            impl_base_name.unwrap_or(quote! { Clone + Sized + Rc + crate::rc::WrapRcPtr });
         let impl_methods = s.methods.iter().map(|m| {
             let sig = m.get_signature(self);
             let method_name = &m.name;
@@ -2438,9 +2443,9 @@ impl ParseTree<'_> {
                     let base = &entry.name;
                     format!(
                         r#"
-    impl {base} {{
-        // ...
-    }}
+impl Impl{base} for My{rust_name} {{
+    // Override {base} methods here.
+}}
 "#
                     )
                 })
@@ -2448,9 +2453,10 @@ impl ParseTree<'_> {
             .collect::<String>();
 
         let wrap_type_comment = format!(
-            r#"Implement the [`Wrap{rust_name}`] trait for the specified struct. You can declare more
-members for your struct, and in the `impl {rust_name}` block you can override default
-methods implemented by the [`Impl{rust_name}`] trait.
+            r#"Declare a Rust-owned [`{rust_name}`] implementation.
+
+Implement [`Impl{rust_name}`] separately for rustfmt and IDE support. For compatibility,
+this macro also accepts the old inline `impl {rust_name}` block form.
 
 # Example
 ```rust
@@ -2460,10 +2466,10 @@ methods implemented by the [`Impl{rust_name}`] trait.
     struct My{rust_name} {{
         payload: String,
     }}
+}}
 {wrap_base_type_comments}
-    impl {rust_name} {{
-        // ...
-    }}
+impl Impl{rust_name} for My{rust_name} {{
+    // Override {rust_name} methods here.
 }}
 
 fn make_my_struct() -> {rust_name} {{
@@ -2694,6 +2700,96 @@ fn make_my_struct() -> {rust_name} {{
                     }
                 };
                 (
+                    $vis:vis struct $name:ident;
+                ) => {
+                    #wrap_type_macro_name! {
+                        $vis struct $name {}
+                    }
+                };
+                (
+                    $vis:vis struct $name:ident$(<
+                        $($generic_type:ident : $first_generic_type_bound:tt $(+ $generic_type_bound:tt)*),+ $(,)?
+                    >)? {
+                        $($field_vis:vis $field_name:ident: $field_type:ty),* $(,)?
+                    }
+                ) => {
+                    $vis struct $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        $($field_vis $field_name: $field_type,)*
+                        cef_object: *mut $crate::rc::RcImpl<$crate::sys::#name_ident, Self>
+                    }
+
+                    impl$(<$($generic_type,)+>)? $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        #[allow(clippy::new_ret_no_self)]
+                        pub fn new($($field_name: $field_type),*) -> #rust_name {
+                            #rust_name::new(
+                                Self {
+                                    $($field_name,)*
+                                    cef_object: std::ptr::null_mut(),
+                                }
+                            )
+                        }
+                    }
+
+                    impl$(<$($generic_type,)+>)? #wrap_trait for $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        fn wrap_rc(&mut self, cef_object: *mut $crate::rc::RcImpl<$crate::sys::#name_ident, Self>) {
+                            self.cef_object = cef_object;
+                        }
+                    }
+
+                    impl$(<$($generic_type,)+>)? Clone for $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        fn clone(&self) -> Self {
+                            unsafe {
+                                let rc_impl = &mut *self.cef_object;
+                                rc_impl.interface.add_ref();
+                            }
+
+                            Self {
+                                $($field_name: self.$field_name.clone(),)*
+                                cef_object: self.cef_object,
+                            }
+                        }
+                    }
+
+                    impl$(<$($generic_type,)+>)? $crate::rc::Rc for $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        fn as_base(&self) -> &$crate::sys::cef_base_ref_counted_t {
+                            unsafe {
+                                let base = &*self.cef_object;
+                                std::mem::transmute(&base.cef_object)
+                            }
+                        }
+                    }
+
+                    impl$(<$($generic_type,)+>)? $crate::rc::WrapRcPtr for $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                            self.cef_object.cast()
+                        }
+                    }
+                };
+                (
                     $vis:vis struct $name:ident$(<
                         $($generic_type:ident : $first_generic_type_bound:tt $(+ $generic_type_bound:tt)*),+ $(,)?
                     >)? {
@@ -2775,6 +2871,16 @@ fn make_my_struct() -> {rust_name} {{
                         }
                     }
 
+                    impl$(<$($generic_type,)+>)? $crate::rc::WrapRcPtr for $name$(<$($generic_type,)+>)?
+                    $(where
+                        $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
+                    )?
+                    {
+                        fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                            self.cef_object.cast()
+                        }
+                    }
+
                     #(#wrap_base_type_impl)*
 
                     impl$(<$($generic_type,)+>)? #impl_trait for $name$(<$($generic_type,)+>)?
@@ -2826,6 +2932,12 @@ fn make_my_struct() -> {rust_name} {{
             impl Rc for #rust_name {
                 fn as_base(&self) -> &#base_ident {
                     self.0.as_base()
+                }
+            }
+
+            impl crate::rc::WrapRcPtr for #rust_name {
+                fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                    unsafe { RefGuard::into_raw(&self.0).cast() }
                 }
             }
 

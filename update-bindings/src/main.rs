@@ -113,3 +113,141 @@ fn read_bindings(source_path: &Path) -> crate::Result<String> {
     source_file.read_to_string(&mut updated)?;
     Ok(updated)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, process::Command};
+
+    #[test]
+    fn struct_only_wrap_macro_allows_external_trait_impls() {
+        let source = r#"
+            use std::ffi::c_void;
+
+            mod rc {
+                use super::c_void;
+
+                pub trait Rc {
+                    fn add_ref(&self) {}
+                }
+
+                pub trait WrapRcPtr {
+                    fn wrap_rc_ptr(&self) -> *mut c_void;
+                }
+
+                pub struct RcImpl<T, I> {
+                    pub cef_object: T,
+                    pub interface: I,
+                }
+            }
+
+            mod sys {
+                #[allow(non_camel_case_types)]
+                pub struct cef_base_ref_counted_t;
+                pub struct ViewDelegate;
+                pub struct PanelDelegate;
+                pub struct WindowDelegate;
+            }
+
+            use rc::{Rc, RcImpl, WrapRcPtr};
+
+            trait ImplViewDelegate: Clone + Sized + Rc + WrapRcPtr {
+                fn get_raw(&self) -> *mut sys::ViewDelegate {
+                    self.wrap_rc_ptr().cast()
+                }
+            }
+
+            trait ImplPanelDelegate: ImplViewDelegate {
+                fn get_raw(&self) -> *mut sys::PanelDelegate {
+                    <Self as ImplViewDelegate>::get_raw(self).cast()
+                }
+            }
+
+            trait ImplWindowDelegate: ImplPanelDelegate {}
+
+            trait WrapWindowDelegate: ImplWindowDelegate {
+                fn wrap_rc(&mut self, object: *mut RcImpl<sys::WindowDelegate, Self>);
+            }
+
+            macro_rules! wrap_window_delegate {
+                ($vis:vis struct $name:ident;) => {
+                    wrap_window_delegate! {
+                        $vis struct $name {}
+                    }
+                };
+                ($vis:vis struct $name:ident { $($field_name:ident: $field_type:ty),* $(,)? }) => {
+                    $vis struct $name {
+                        $($field_name: $field_type,)*
+                        cef_object: *mut RcImpl<sys::WindowDelegate, Self>,
+                    }
+
+                    impl $name {
+                        pub fn new($($field_name: $field_type),*) -> Self {
+                            Self {
+                                $($field_name,)*
+                                cef_object: std::ptr::null_mut(),
+                            }
+                        }
+                    }
+
+                    impl WrapWindowDelegate for $name {
+                        fn wrap_rc(&mut self, cef_object: *mut RcImpl<sys::WindowDelegate, Self>) {
+                            self.cef_object = cef_object;
+                        }
+                    }
+
+                    impl Clone for $name {
+                        fn clone(&self) -> Self {
+                            Self {
+                                $($field_name: self.$field_name.clone(),)*
+                                cef_object: self.cef_object,
+                            }
+                        }
+                    }
+
+                    impl Rc for $name {}
+
+                    impl WrapRcPtr for $name {
+                        fn wrap_rc_ptr(&self) -> *mut c_void {
+                            self.cef_object.cast()
+                        }
+                    }
+                };
+            }
+
+            wrap_window_delegate! {
+                struct DemoWindowDelegate;
+            }
+
+            impl ImplViewDelegate for DemoWindowDelegate {}
+            impl ImplPanelDelegate for DemoWindowDelegate {}
+            impl ImplWindowDelegate for DemoWindowDelegate {}
+
+            fn assert_wrap<T: WrapWindowDelegate>() {}
+
+            fn main() {
+                assert_wrap::<DemoWindowDelegate>();
+            }
+        "#;
+
+        let test_dir =
+            std::env::temp_dir().join(format!("cef-rs-wrap-macro-test-{}", std::process::id()));
+        fs::create_dir_all(&test_dir).unwrap();
+        let source_path = test_dir.join("main.rs");
+        fs::write(&source_path, source).unwrap();
+
+        let output = Command::new("rustc")
+            .arg("--edition=2021")
+            .arg(&source_path)
+            .arg("--out-dir")
+            .arg(&test_dir)
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "rustc failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}

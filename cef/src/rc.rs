@@ -51,6 +51,11 @@ pub trait Rc {
     fn as_base(&self) -> &cef_base_ref_counted_t;
 }
 
+#[doc(hidden)]
+pub trait WrapRcPtr {
+    fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void;
+}
+
 impl Rc for cef_base_ref_counted_t {
     unsafe fn add_ref(&self) {
         if let Some(add_ref) = self.add_ref {
