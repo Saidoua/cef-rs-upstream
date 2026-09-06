@@ -276,7 +276,10 @@ impl<T: Rc> RefGuard<T> {
         self.object
     }
 
-    /// Get the raw pointer without changing the reference count.
+    /// Borrow the raw pointer without changing the reference count or implying an ownership transfer.
+    ///
+    /// Use this accessor when the pointer is only observed. Use [`RefGuard::into_raw`] for call
+    /// sites that intentionally pass ownership at an FFI boundary.
     pub fn as_ptr(&self) -> *mut T {
         self.object
     }

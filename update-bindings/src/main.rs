@@ -127,25 +127,28 @@ mod tests {
             .join("src")
             .join("bindings");
         let patterns = [
-            "pub trait ImplWindowDelegate: ImplPanelDelegate",
-            "pub trait ImplViewDelegate: Clone + Sized + Rc + crate::rc::WrapRcPtr",
-            "($ vis : vis struct $ name : ident ;) => { wrap_window_delegate ! { $ vis struct $ name { } } }",
-            "fn get_raw(&self) -> *mut _cef_view_delegate_t { self.as_rc_ptr().cast() }",
+            "pubtraitImplWindowDelegate:ImplPanelDelegate",
+            "pubtraitImplViewDelegate:Clone+Sized+Rc+crate::rc::WrapRcPtr",
+            "($vis:visstruct$name:ident;)=>{wrap_window_delegate!{$visstruct$name{}}}",
+            "fnget_raw(&self)->*mut_cef_view_delegate_t{self.as_rc_ptr().cast()}",
         ]
-        .map(normalize_whitespace);
+        .map(strip_whitespace);
 
         let mut bindings = String::new();
         for entry in fs::read_dir(bindings_dir).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.file_name().is_some_and(|name| name == "mod.rs") {
+            if !path.is_file()
+                || path.extension().and_then(|extension| extension.to_str()) != Some("rs")
+                || path.file_name().is_some_and(|name| name == "mod.rs")
+            {
                 continue;
             }
 
             bindings.push_str(&fs::read_to_string(&path).unwrap());
         }
 
-        let bindings = normalize_whitespace(&bindings);
+        let bindings = strip_whitespace(&bindings);
         for pattern in patterns.iter() {
             assert!(
                 bindings.contains(pattern),
@@ -154,7 +157,7 @@ mod tests {
         }
     }
 
-    fn normalize_whitespace(source: &str) -> String {
-        source.split_whitespace().collect::<Vec<_>>().join(" ")
+    fn strip_whitespace(source: &str) -> String {
+        source.chars().filter(|c| !c.is_whitespace()).collect()
     }
 }
