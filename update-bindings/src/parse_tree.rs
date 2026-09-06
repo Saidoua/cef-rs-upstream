@@ -2784,7 +2784,7 @@ fn make_my_struct() -> {rust_name} {{
                         $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
                     )?
                     {
-                        fn as_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                        fn as_rc_ptr(&self) -> *mut ::std::os::raw::c_void {
                             self.cef_object.cast()
                         }
                     }
@@ -2868,7 +2868,7 @@ fn make_my_struct() -> {rust_name} {{
             }
 
             impl crate::rc::WrapRcPtr for #rust_name {
-                fn as_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                fn as_rc_ptr(&self) -> *mut ::std::os::raw::c_void {
                     RefGuard::as_ptr(&self.0).cast()
                 }
             }

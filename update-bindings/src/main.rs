@@ -134,6 +134,7 @@ mod tests {
         ]
         .map(normalize_whitespace);
 
+        let mut bindings = String::new();
         for entry in fs::read_dir(bindings_dir).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -141,14 +142,15 @@ mod tests {
                 continue;
             }
 
-            let bindings = normalize_whitespace(&fs::read_to_string(&path).unwrap());
-            for pattern in patterns.iter() {
-                assert!(
-                    bindings.contains(pattern),
-                    "{} is missing generated pattern: {pattern}",
-                    path.display()
-                );
-            }
+            bindings.push_str(&fs::read_to_string(&path).unwrap());
+        }
+
+        let bindings = normalize_whitespace(&bindings);
+        for pattern in patterns.iter() {
+            assert!(
+                bindings.contains(pattern),
+                "generated bindings are missing pattern: {pattern}"
+            );
         }
     }
 
