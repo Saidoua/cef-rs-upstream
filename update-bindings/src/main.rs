@@ -121,24 +121,38 @@ mod tests {
     #[test]
     fn generated_wrap_macros_support_external_trait_impls() {
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let bindings = fs::read_to_string(
-            manifest_dir
-                .join("..")
-                .join("cef")
-                .join("src")
-                .join("bindings")
-                .join("x86_64_unknown_linux_gnu.rs"),
-        )
-        .unwrap();
+        let bindings_dir = manifest_dir
+            .join("..")
+            .join("cef")
+            .join("src")
+            .join("bindings");
+        let patterns = [
+            "pub trait ImplWindowDelegate: ImplPanelDelegate",
+            "pub trait ImplViewDelegate: Clone + Sized + Rc + crate::rc::WrapRcPtr",
+            "($ vis : vis struct $ name : ident ;) => { wrap_window_delegate ! { $ vis struct $ name { } } }",
+            "fn get_raw(&self) -> *mut _cef_view_delegate_t { self.as_rc_ptr().cast() }",
+        ]
+        .map(normalize_whitespace);
 
-        assert!(bindings.contains("pub trait ImplWindowDelegate: ImplPanelDelegate"));
-        assert!(bindings
-            .contains("pub trait ImplViewDelegate: Clone + Sized + Rc + crate::rc::WrapRcPtr"));
-        assert!(bindings.contains(
-            "($ vis : vis struct $ name : ident ;) => { wrap_window_delegate ! { $ vis struct $ name { } } }"
-        ));
-        assert!(bindings.contains(
-            "fn get_raw(&self) -> *mut _cef_view_delegate_t {\n        self.wrap_rc_ptr().cast()\n    }"
-        ));
+        for entry in fs::read_dir(bindings_dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.file_name().is_some_and(|name| name == "mod.rs") {
+                continue;
+            }
+
+            let bindings = normalize_whitespace(&fs::read_to_string(&path).unwrap());
+            for pattern in patterns.iter() {
+                assert!(
+                    bindings.contains(pattern),
+                    "{} is missing generated pattern: {pattern}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    fn normalize_whitespace(source: &str) -> String {
+        source.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 }

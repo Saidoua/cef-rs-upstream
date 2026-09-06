@@ -2329,7 +2329,7 @@ impl ParseTree<'_> {
             })
             .unwrap_or(quote! {
                 fn get_raw(&self) -> *mut #name_ident {
-                    self.wrap_rc_ptr().cast()
+                    self.as_rc_ptr().cast()
                 }
             });
         let impl_base_name =
@@ -2784,7 +2784,7 @@ fn make_my_struct() -> {rust_name} {{
                         $($generic_type: $first_generic_type_bound $(+ $generic_type_bound)*,)+
                     )?
                     {
-                        fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                        fn as_rc_ptr(&self) -> *mut std::os::raw::c_void {
                             self.cef_object.cast()
                         }
                     }
@@ -2868,8 +2868,8 @@ fn make_my_struct() -> {rust_name} {{
             }
 
             impl crate::rc::WrapRcPtr for #rust_name {
-                fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void {
-                    <Self as #impl_trait>::get_raw(self).cast()
+                fn as_rc_ptr(&self) -> *mut std::os::raw::c_void {
+                    RefGuard::as_ptr(&self.0).cast()
                 }
             }
 

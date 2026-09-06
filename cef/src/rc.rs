@@ -51,10 +51,11 @@ pub trait Rc {
     fn as_base(&self) -> &cef_base_ref_counted_t;
 }
 
+/// Implementation detail used by generated `wrap_*` macros to read the wrapped CEF object pointer.
 #[doc(hidden)]
 pub trait WrapRcPtr {
-    /// Returns the raw CEF object pointer owned by this Rust wrapper without changing its reference count.
-    fn wrap_rc_ptr(&self) -> *mut std::os::raw::c_void;
+    /// Returns the raw CEF object pointer without changing its reference count.
+    fn as_rc_ptr(&self) -> *mut std::os::raw::c_void;
 }
 
 impl Rc for cef_base_ref_counted_t {
@@ -272,6 +273,11 @@ impl<T: Rc> RefGuard<T> {
     /// value to the function call. Using this method elsewhere may cause incorrect reference count
     /// and memory safety issues.
     pub unsafe fn into_raw(&self) -> *mut T {
+        self.object
+    }
+
+    /// Get the raw pointer without changing the reference count.
+    pub fn as_ptr(&self) -> *mut T {
         self.object
     }
 
